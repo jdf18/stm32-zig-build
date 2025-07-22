@@ -26,7 +26,7 @@ To do this:
 *(A sample config.yaml file is present in this repo for reference.)*
 2. You can then run: `python3 path/to/stm32-zig-build/setup.py` from your project root which will generate the `devices.zig` file.
 
-For actually using this tool I have an example project repo [here](remind-me-to-fix-this-link) which i would recommend having a look at.
+For actually using this tool I have an example project repo [here](https://github.com/jdf18/stm32-zig-template) which i would recommend having a look at.
 
 ### config.yaml
 
