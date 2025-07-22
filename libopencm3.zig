@@ -35,6 +35,28 @@ pub fn libopencm3(b: *std.Build, chip: stm.STM32Chip) !struct { *std.Build.Step,
     return .{ &opencm3_build.step, b.path(path) };
 }
 
+pub fn processLinkerScript(b: *std.Build, defines: []const []const u8) !std.Build.LazyPath {
+    // generate a linker script for the model of processor being used
+    const out_path = "linker.ld";
+
+    // Use a C preprocessor to fill in values into the linker template provided by libopencm3
+    //   Defines can be found using the genlink.py script in the DEFS mode.
+    const run = b.addSystemCommand(&[_][]const u8{
+        "zig", "cc",
+        "-E",  "-P",
+    });
+    run.addArgs(defines);
+
+    run.addArg(try std.mem.concat(b.allocator, u8, &[_][]const u8{
+        path_libopencm3, "/libopencm3/ld/linker.ld.S",
+    }));
+
+    run.addArg("-o");
+    const linker_script = run.addOutputFileArg(out_path);
+
+    return linker_script;
+}
+
 pub fn clean(b: *std.Build) !*std.Build.Step {
     // Build the library object file
     const verbose_str = switch (b.verbose) {
