@@ -26,6 +26,8 @@ pub fn libopencm3(b: *std.Build, chip: stm.STM32Chip) !struct { *std.Build.Step,
     const opencm3_build = b.addSystemCommand(&.{ "sh", "-c" });
     opencm3_build.addArg(make_command);
 
+    opencm3_build.step.name = "build libopencm3";
+
     const path = try std.fmt.allocPrint(
         b.allocator,
         "{s}/libopencm3/lib/libopencm3_{s}.a",
