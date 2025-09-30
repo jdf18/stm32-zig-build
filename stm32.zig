@@ -8,6 +8,7 @@ pub const TargetConfig = struct {
     target: std.Build.ResolvedTarget,
     kind: TargetKind,
     flags: []const []const u8,
+    is_test: bool = false,
 };
 
 pub const STM32Chip = struct {
