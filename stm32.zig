@@ -1,21 +1,25 @@
 const std = @import("std");
 const device = @import("devices.zig"); // run setup.py script if this file does not exist
 
-pub const TargetKind = enum { native, stm32 };
-
-pub const TargetConfig = struct {
-    name: []const u8,
-    target: std.Build.ResolvedTarget,
-    kind: TargetKind,
-    flags: []const []const u8,
-    is_test: bool = false,
-};
 
 pub const STM32Chip = struct {
     target: std.Target.Query,
     defines: []const []const u8,
     chip: device.ChipInfo,
     flags: []const []const u8,
+};
+
+pub const TargetKind = union(enum) {
+    native,
+    stm32: STM32Chip,
+};
+
+pub const BuildConfig = struct {
+    name: []const u8,
+    target: std.Build.ResolvedTarget,
+    kind: TargetKind,
+    flags: []const []const u8,
+    is_test: bool = false,
 };
 
 pub fn get_stm32_chip(b: *std.Build, comptime device_id: []const u8) !STM32Chip {
