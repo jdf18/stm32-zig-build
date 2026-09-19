@@ -1,3 +1,6 @@
 [submodule "libopencm3"]
 	path = libopencm3
 	url = https://github.com/libopencm3/libopencm3.git
+[submodule "backends/stm32hal/STM32CubeL4"]
+	path = backends/stm32hal/STM32CubeL4
+	url = https://github.com/STMicroelectronics/STM32CubeL4.git

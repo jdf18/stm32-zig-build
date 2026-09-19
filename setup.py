@@ -8,7 +8,7 @@ GENERATED_DEVICE_FILE = DIR + "/devices.zig"
 
 DATA_FIELDS = ["family", "subfamily", "cppflags", "defs", "cpu", "fpu"]
 
-ZIG_CHIP_STRUCT = """pub const ChipInfo = struct {
+ZIG_CHIP_STRUCT = """pub const ChipDefines = struct {
     id: []const u8,
     family: []const u8,
     subfamily: []const u8,
@@ -21,7 +21,7 @@ ZIG_CHIP_STRUCT = """pub const ChipInfo = struct {
 
 ZIG_CHIP_FN = """const std = @import("std");
 
-pub fn get_chip_info(comptime id: []const u8) ChipInfo {
+pub fn get_chip_info(comptime id: []const u8) ChipDefines {
     for (chips) |chip| {
         if (std.mem.eql(u8, chip.id, id)) return chip;
     }
@@ -65,7 +65,7 @@ if __name__ == "__main__":
         f.write(ZIG_CHIP_STRUCT)
         f.write(ZIG_CHIP_FN)
 
-        f.write(f"pub const chips = [_]ChipInfo" + "{\n")
+        f.write(f"pub const chips = [_]ChipDefines" + "{\n")
         for chip in chips:
             data = {field : get_chip_data(chip, field) for field in DATA_FIELDS}
             f.write(indent(ZIG_CHIP_DATA_FORMAT).format(

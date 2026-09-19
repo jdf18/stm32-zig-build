@@ -15,7 +15,7 @@ pub fn libopencm3(b: *std.Build, chip: stm.STM32Chip) !struct { *std.Build.Step,
         false => " > /dev/null",
     };
     const make_command: []const u8 = try std.mem.concat(b.allocator, u8, &[_][]const u8{
-        "make TARGETS=", chip.chip.opencm3target, " -s V=0 -C ",
+        "make TARGETS=", chip.defines.opencm3target, " -s V=0 -C ",
         b.path(try std.mem.concat(b.allocator, u8, &[_][]const u8{
             path_libopencm3, "/libopencm3",
         })).getPath(b),
@@ -31,7 +31,7 @@ pub fn libopencm3(b: *std.Build, chip: stm.STM32Chip) !struct { *std.Build.Step,
     const path = try std.fmt.allocPrint(
         b.allocator,
         "{s}/libopencm3/lib/libopencm3_{s}.a",
-        .{ path_libopencm3, chip.chip.family },
+        .{ path_libopencm3, chip.defines.family },
     );
 
     return .{ &opencm3_build.step, b.path(path) };

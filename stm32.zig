@@ -1,81 +1,74 @@
 const std = @import("std");
+
 const device = @import("devices.zig"); // run setup.py script if this file does not exist
 
+pub const utils = @import("utils.zig");
+const splitDefines = utils.splitDefines;
+const concatSlices = utils.concatSlices;
+
+
+// Information regarding the specific STM chip being used
+// pub const STM32Chip = struct {
+//     target: std.Target.Query,
+//     defines: []const []const u8,
+//     chip: device.ChipDefines,
+//     flags: []const []const u8,
+// };
 
 pub const STM32Chip = struct {
-    target: std.Target.Query,
-    defines: []const []const u8,
-    chip: device.ChipInfo,
+    display_name: []const u8,
+    cpu_model: *const std.Target.Cpu.Model,
+    defines: device.ChipDefines,
     flags: []const []const u8,
 };
 
+pub fn getSTM32Info(b: *std.Build, comptime device_id: []const u8) !STM32Chip {
+    const defines = comptime device.get_chip_info(device_id);
+
+    // Combine all the flags together to pass into the compiler later
+    const cpp_flags = try splitDefines(b.allocator, defines.cppflags);
+    const comp_flags = getCompileFlags(defines);
+    const fpu_flags = getFpuFlags(defines);
+
+    const all_flags = try concatSlices(
+        b.allocator,
+        try concatSlices(
+            b.allocator,
+            cpp_flags,
+            comp_flags,
+        ),
+        fpu_flags,
+    );
+    return STM32Chip{
+        .display_name = device_id,
+        .cpu_model = getCpuModel(defines.cpu),
+        .defines = defines,
+        .flags = all_flags,
+    };
+}
+
+// Type of target being built for, either native or STM
 pub const TargetKind = union(enum) {
     native,
     stm32: STM32Chip,
 };
 
-pub const BuildConfig = struct {
-    name: []const u8,
-    target: std.Build.ResolvedTarget,
-    kind: TargetKind,
-    flags: []const []const u8,
-    is_test: bool = false,
-};
+pub fn resolveTarget(b: *std.Build, native_target: std.Build.ResolvedTarget, target: TargetKind) std.Build.ResolvedTarget {
+    if (target == .native) return native_target;
 
-pub fn get_stm32_chip(b: *std.Build, comptime device_id: []const u8) !STM32Chip {
-    const chip: device.ChipInfo = device.get_chip_info(device_id);
-    const cpu = comptime device.get_chip_cpu(device_id);
-
-    const flags = &[_][]const u8{
-        "-mcpu=" ++ cpu,
-        "-nostdlib", // No standard libraries
-        "-nostartfiles", // No startup files
-        "-ffreestanding",
-        "-Wall",
-        "-Wextra",
-        "-Wno-unused-parameter",
-        "-fno-exceptions", // Disable C++ exceptions
-        "-fno-rtti",
-        "-ffunction-sections",
-        "-fdata-sections",
-        "-fno-sanitize=undefined",
-        switch (is_cpu_thumb(cpu)) {
-            true => "-mthumb",
-            false => "-marm",
+    return b.resolveTargetQuery(.{
+        .os_tag = .freestanding,
+        .abi = .eabi,
+        .cpu_arch = switch (isThumbCpu(target.stm32.defines.cpu)) {
+            true => .thumb,
+            false => .arm,
         },
-    };
-
-    const fpu_flags = fpu_flags: {
-        if (std.mem.eql(u8, chip.fpu, "soft")) {
-            break :fpu_flags &[_][]const u8{"-msoft-float"};
-        } else if (std.mem.eql(u8, chip.fpu, "hard-fpv4-sp-d16")) {
-            break :fpu_flags &[_][]const u8{ "-mfloat-abi=hard", "-mfpu=fpv4-sp-d16" };
-        } else if (std.mem.eql(u8, chip.fpu, "hard-fpv5-d16")) {
-            break :fpu_flags &[_][]const u8{ "-mfloat-abi=hard", "-mfpu=fpv5-d16" };
-        } else if (std.mem.eql(u8, chip.fpu, "hard-fpv5-sp-d16")) {
-            break :fpu_flags &[_][]const u8{ "-mfloat-abi=hard", "-mfpu=fpv5-sp-d16" };
-        } else {
-            unreachable;
-        }
-    };
-
-    return STM32Chip{
-        .target = get_stm32_target(cpu),
-        .defines = try splitDefines(b.allocator, chip.defs),
-        .chip = chip,
-        .flags = try concatSlices(
-            b.allocator,
-            try concatSlices(
-                b.allocator,
-                try splitDefines(b.allocator, chip.cppflags),
-                flags,
-            ),
-            fpu_flags,
-        ),
-    };
+        .cpu_model = .{ .explicit = target.stm32.cpu_model }
+    });
 }
 
-fn is_cpu_thumb(cpu: []const u8) bool {
+
+fn isThumbCpu(cpu: []const u8) bool {
     const thumbcpus = [_][]const u8{ "cortex-m0", "cortex-m0plus", "cortex-m3", "cortex-m4", "cortex-m7" };
     for (thumbcpus) |testcpu| {
         if (std.mem.eql(u8, cpu, testcpu)) {
@@ -85,19 +78,56 @@ fn is_cpu_thumb(cpu: []const u8) bool {
     return false;
 }
 
-pub fn get_stm32_target(comptime cpu: []const u8) std.Target.Query {
-    return std.Target.Query{
-        .cpu_arch = switch (is_cpu_thumb(cpu)) {
-            true => .thumb,
-            false => .arm,
-        },
-        .os_tag = .freestanding,
-        .abi = .eabi,
-        .cpu_model = std.Target.Query.CpuModel{
-            .explicit = getCpuModel(cpu),
+fn getCompileFlags(comptime defs: device.ChipDefines) []const []const u8 {
+    const cpu = defs.cpu;
+
+    return &[_][]const u8{
+        "-mcpu=" ++ cpu,
+        "-nostdlib", // No standard libraries
+        // "-nostartfiles", // No startup files
+        "-ffreestanding",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-fno-exceptions", // Disable C++ exceptions
+        "-fno-rtti",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-fno-sanitize=undefined",
+        "-Wl,--gc-sections",
+        switch (comptime isThumbCpu(cpu)) {
+            true => "-mthumb",
+            false => "-marm",
         },
     };
 }
+
+fn getFpuFlags(chip: device.ChipDefines) []const []const u8 {
+    if (std.mem.eql(u8, chip.fpu, "soft")) {
+        return &[_][]const u8{"-msoft-float"};
+    } else if (std.mem.eql(u8, chip.fpu, "hard-fpv4-sp-d16")) {
+        return &[_][]const u8{ "-mfloat-abi=hard", "-mfpu=fpv4-sp-d16" };
+    } else if (std.mem.eql(u8, chip.fpu, "hard-fpv5-d16")) {
+        return &[_][]const u8{ "-mfloat-abi=hard", "-mfpu=fpv5-d16" };
+    } else if (std.mem.eql(u8, chip.fpu, "hard-fpv5-sp-d16")) {
+        return &[_][]const u8{ "-mfloat-abi=hard", "-mfpu=fpv5-sp-d16" };
+    } 
+    unreachable;
+}
+
+// pub fn get_stm32_target(comptime cpu: []const u8) std.Target.Query {
+//     return std.Target.Query{
+//         .cpu_arch = switch (isThumbCpu(cpu)) {
+//             true => .thumb,
+//             false => .arm,
+//         },
+//         .os_tag = .freestanding,
+//         .abi = .eabi,
+//         .cpu_model = std.Target.Query.CpuModel{
+//             .explicit = getCpuModel(cpu),
+//         },
+//     };
+// }
 
 fn getCpuModel(comptime model_name: []const u8) *const std.Target.Cpu.Model {
     // Return a cpu model object to create executables/libraries with from model name
@@ -111,23 +141,3 @@ fn getCpuModel(comptime model_name: []const u8) *const std.Target.Cpu.Model {
     unreachable;
 }
 
-pub fn splitDefines(allocator: std.mem.Allocator, defines: []const u8) ![]const []const u8 {
-    // Given a string of space-separated defines, return an array of string defines
-    var tokens = std.mem.tokenizeScalar(u8, defines, ' ');
-    var list = std.ArrayList([]const u8).empty;
-
-    while (tokens.next()) |token| {
-        try list.append(allocator, token);
-    }
-
-    return list.toOwnedSlice(allocator);
-}
-
-pub fn concatSlices(allocator: std.mem.Allocator, sliceA: []const []const u8, sliceB: []const []const u8) ![]const []const u8 {
-    // concatenate two arrays of strings
-    var list = std.ArrayList([]const u8).empty;
-
-    try list.appendSlice(allocator, sliceA);
-    try list.appendSlice(allocator, sliceB);
-    return list.toOwnedSlice(allocator);
-}
